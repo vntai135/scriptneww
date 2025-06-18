@@ -1,14 +1,12 @@
 --[[
-  Roblox Loading Screen Script (English Version)
-  - Covers the entire screen (including the chat bar and settings)
-  - Centered white text: "Trying to find an old server"
-  - White horizontal bar slowly animates from left to right beneath the text
-  - Solid black background
-  - Easy to use: just place this LocalScript in StarterGui
-
-  To remove the loading screen later, call: screenGui:Destroy()
+  Roblox Loading Screen + Auto Kick+Rejoin + Teleport to full server every 30s (Delta/Executor compatible)
+  - Loading screen, progress bar, chat hidden
+  - Every 30 seconds, tries to teleport you to a full server, if one exists
+  - After 120 seconds, auto kicks with a message and rejoins
+  - Auto re-execute on teleport/rejoin or joining any server (autoexec on serverhop/rejoin)
 --]]
 
+local autoexec_code = [[
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
@@ -25,7 +23,6 @@ screenGui.Name = "LoadingScreen"
 screenGui.DisplayOrder = 10000 -- Always on top
 screenGui.Parent = playerGui
 
--- Black background
 local background = Instance.new("Frame")
 background.BackgroundColor3 = Color3.new(0,0,0)
 background.Size = UDim2.new(1,0,1,0)
@@ -33,7 +30,6 @@ background.Position = UDim2.new(0,0,0,0)
 background.BorderSizePixel = 0
 background.Parent = screenGui
 
--- Centered white text
 local textLabel = Instance.new("TextLabel")
 textLabel.Size = UDim2.new(1, 0, 0, 50)
 textLabel.Position = UDim2.new(0, 0, 0.45, 0)
@@ -46,7 +42,6 @@ textLabel.TextStrokeTransparency = 0.5
 textLabel.TextWrapped = true
 textLabel.Parent = screenGui
 
--- White progress bar background (faded)
 local barBack = Instance.new("Frame")
 barBack.Size = UDim2.new(0.3, 0, 0, 8)
 barBack.Position = UDim2.new(0.35, 0, 0.53, 0)
@@ -55,7 +50,6 @@ barBack.BackgroundColor3 = Color3.new(1,1,1)
 barBack.BorderSizePixel = 0
 barBack.Parent = screenGui
 
--- Animated white bar
 local bar = Instance.new("Frame")
 bar.Size = UDim2.new(0, 0, 1, 0)
 bar.Position = UDim2.new(0, 0, 0, 0)
@@ -63,7 +57,6 @@ bar.BackgroundColor3 = Color3.new(1,1,1)
 bar.BorderSizePixel = 0
 bar.Parent = barBack
 
--- Hide chat bar if it appears
 local function hideChat()
     local chat = playerGui:FindFirstChild("Chat")
     if chat then
@@ -78,14 +71,12 @@ playerGui.ChildAdded:Connect(function(child)
     end
 end)
 
--- Animate the white bar
-local speed = 2 -- seconds to go from left to right
+local speed = 2
 local function animateBar()
     while screenGui.Parent do
         bar.Size = UDim2.new(0, 0, 1, 0)
         bar.Position = UDim2.new(0, 0, 0, 0)
         bar.BackgroundTransparency = 0
-        -- Tween from left to right
         local tweenInfo = TweenInfo.new(speed, Enum.EasingStyle.Linear)
         local tween = TweenService:Create(
             bar,
@@ -94,22 +85,20 @@ local function animateBar()
         )
         tween:Play()
         tween.Completed:Wait()
-        -- Quick fade out and repeat
         for i = 0, 1, 0.1 do
             bar.BackgroundTransparency = i
-            wait(0.01)
+            task.wait(0.01)
         end
-        wait(0.2)
+        task.wait(0.2)
     end
 end
 
-spawn(animateBar)
+task.spawn(animateBar)
 
 -- === TELEPORT TO FULL SERVER EVERY 30s ===
 local function teleportToFullServer()
     local placeId = game.PlaceId
-    local url =
-        ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100"):format(placeId)
+    local url = ("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100"):format(placeId)
     local success, result = pcall(function()
         return HttpService:JSONDecode(game:HttpGet(url))
     end)
@@ -126,19 +115,19 @@ local function teleportToFullServer()
     end
 end
 
-spawn(function()
+task.spawn(function()
     while true do
-        wait(30)
+        task.wait(30)
         pcall(teleportToFullServer)
     end
 end)
 
 -- === AUTO KICK & REJOIN ===
-local kickMessage = "Not found old server, try again later"
-local delaySeconds = 120
+local kickMessage = "Not found old server,try again later"
+local delaySeconds = 5
 
-spawn(function()
-    wait(delaySeconds)
+task.spawn(function()
+    task.wait(delaySeconds)
     pcall(function()
         if screenGui and screenGui.Parent then
             screenGui:Destroy()
@@ -147,11 +136,20 @@ spawn(function()
     pcall(function()
         player:Kick(kickMessage)
     end)
-    wait(0.5)
+    task.wait(0.5)
     TeleportService:Teleport(game.PlaceId, player)
 end)
+]]
 
---[[
-  To remove the loading screen at any time, run:
-    game.Players.LocalPlayer.PlayerGui.LoadingScreen:Destroy()
---]]
+-- Run on first join
+loadstring(autoexec_code)()
+
+-- Auto re-execute after teleport/rejoin/serverhop (for Delta, KRNL, Trigon, etc.)
+local TeleportService = game:GetService("TeleportService")
+local queue = queue_on_teleport or syn and syn.queue_on_teleport
+
+if queue then
+    queue(autoexec_code)
+else
+    warn("Your exploit does not support queue_on_teleport. Auto-execute will only run on first join.")
+end
